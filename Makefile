@@ -20,7 +20,7 @@ fix: ## Auto-fix lint issues where possible
 
 .PHONY: fieldalign
 fieldalign: ## Apply field alignment fixes
-	@go tool fieldalignment -fix ./pkg/...
+	@go tool fieldalignment -fix ./...
 
 .PHONY: fmt
 fmt: ## Run project formatting helpers
@@ -34,6 +34,20 @@ tidy: ## Tidy go.mod and download modules
 .PHONY: test
 test: ## Run unit tests with coverage (JSON output piped through gotestfmt)
 	@go test -covermode=atomic -gcflags='all=-N -l' -tags testing -coverprofile=coverage.txt -timeout 5m -json -v ./... 2>&1 | go tool gotestfmt -showteststatus
+
+.PHONY: test-api-coverage
+test-api-coverage: ## Run API coverage tests to ensure all Mailpit routes are implemented
+	@echo "Running API coverage tests..."
+	@go test -v -run TestAPIRouteCoverage -timeout=3m
+
+.PHONY: test-api-coverage-offline
+test-api-coverage-offline: ## Run offline API coverage tests (faster, uses static spec)
+	@echo "Running offline API coverage tests..."
+	@go test -v -run TestAPIRouteCoverageOffline -timeout=30s
+
+.PHONY: api-coverage-maintenance
+api-coverage-maintenance: ## Show API coverage maintenance options
+	@./scripts/api-coverage.sh help
 
 .PHONY: security
 security: ## Run basic security checks (gosec)

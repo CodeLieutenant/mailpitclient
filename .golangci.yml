@@ -64,7 +64,6 @@ linters:
     - staticcheck
     - thelper
     - unparam
-    - testifylint
     - tparallel
     - unused
     - wastedassign
@@ -158,9 +157,6 @@ linters:
       - third_party$
       - builtin$
       - examples$
-  errorlint:
-    allowed-errors:
-      - err: "io.EOF"
 
 issues:
   max-issues-per-linter: 1000

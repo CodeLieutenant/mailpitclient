@@ -459,7 +459,7 @@ func TestClient_GetMessageLinkCheck(t *testing.T) {
 				require.NotNil(t, result)
 				require.Len(t, result.Links, 2)
 				require.Equal(t, "https://example.com", result.Links[0].URL)
-				require.Equal(t, 200, result.Links[0].Status)
+				require.Equal(t, float64(200), result.Links[0].Status) // JSON numbers become float64 with any type
 			}
 		})
 	}

@@ -32,11 +32,11 @@ var (
 
 type SMTPConfig struct {
 	Host       string
-	Port       uint16
 	Username   string
 	Password   string
 	AuthType   string
 	Encryption string
+	Port       uint16
 }
 
 // TestSMTP holds the test SMTP resources

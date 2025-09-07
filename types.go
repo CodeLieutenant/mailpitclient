@@ -82,13 +82,25 @@ type MessagesResponse struct {
 
 // ServerInfo represents server information and status.
 type ServerInfo struct {
-	Settings map[string]string `json:"settings,omitempty"`
-	Version  string            `json:"version"`
-	Runtime  string            `json:"runtime"`
-	Database string            `json:"database"`
-	Tags     []string          `json:"tags,omitempty"`
-	SMTPPort int               `json:"smtp"`
-	HTTPPort int               `json:"http"`
+	Tags          any          `json:"Tags"`
+	Version       string       `json:"Version"`
+	LatestVersion string       `json:"LatestVersion,omitempty"`
+	Database      string       `json:"Database"`
+	RuntimeStats  RuntimeStats `json:"RuntimeStats"`
+	DatabaseSize  int64        `json:"DatabaseSize"`
+	Messages      int          `json:"Messages"`
+	Unread        int          `json:"Unread"`
+}
+
+// RuntimeStats represents runtime statistics
+type RuntimeStats struct {
+	Uptime           int64 `json:"Uptime"`
+	Memory           int64 `json:"Memory"`
+	MessagesDeleted  int   `json:"MessagesDeleted"`
+	SMTPAccepted     int   `json:"SMTPAccepted"`
+	SMTPAcceptedSize int64 `json:"SMTPAcceptedSize"`
+	SMTPRejected     int   `json:"SMTPRejected"`
+	SMTPIgnored      int   `json:"SMTPIgnored"`
 }
 
 // Stats represents server statistics.
@@ -212,9 +224,9 @@ type LinkCheckResponse struct {
 
 // LinkCheck represents a checked link.
 type LinkCheck struct {
+	Status any    `json:"status"`
 	URL    string `json:"url"`
 	Error  string `json:"error,omitempty"`
-	Status int    `json:"status"`
 }
 
 // SpamAssassinCheckResponse represents response from SpamAssassin check endpoint.
@@ -273,9 +285,24 @@ type SendMessageResponse struct {
 
 // WebUIConfig represents web UI configuration.
 type WebUIConfig struct {
-	Version      string `json:"Version"`
-	ReadOnly     bool   `json:"ReadOnly"`
-	ShowVersions bool   `json:"ShowVersions"`
+	Label               string       `json:"Label"`
+	MessageRelay        MessageRelay `json:"MessageRelay"`
+	SpamAssassin        bool         `json:"SpamAssassin"`
+	ChaosEnabled        bool         `json:"ChaosEnabled"`
+	DuplicatesIgnored   bool         `json:"DuplicatesIgnored"`
+	HideDeleteAllButton bool         `json:"HideDeleteAllButton"`
+}
+
+// MessageRelay represents message relay configuration
+type MessageRelay struct {
+	SMTPServer         string `json:"SMTPServer"`
+	ReturnPath         string `json:"ReturnPath"`
+	AllowedRecipients  string `json:"AllowedRecipients"`
+	BlockedRecipients  string `json:"BlockedRecipients"`
+	OverrideFrom       string `json:"OverrideFrom"`
+	RecipientAllowlist string `json:"RecipientAllowlist"`
+	Enabled            bool   `json:"Enabled"`
+	PreserveMessageIDs bool   `json:"PreserveMessageIDs"`
 }
 
 // ChaosResponse represents response from chaos endpoints.
@@ -296,4 +323,17 @@ type ChaosTriggers struct {
 	DelayMailFrom     float64 `json:"delay_mail_from,omitempty"`
 	DelayRcptTo       float64 `json:"delay_rcpt_to,omitempty"`
 	DelayData         float64 `json:"delay_data,omitempty"`
+}
+
+// EventsResponse represents response from message events endpoint.
+type EventsResponse struct {
+	Events []MessageEvent `json:"events"`
+}
+
+// MessageEvent represents a message event.
+type MessageEvent struct {
+	Timestamp time.Time `json:"Timestamp"`
+	Data      any       `json:"Data,omitempty"`
+	ID        string    `json:"ID"`
+	Type      string    `json:"Type"`
 }

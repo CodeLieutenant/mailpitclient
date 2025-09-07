@@ -92,11 +92,9 @@ func TestClient_GetServerInfo(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, result)
 				require.Equal(t, "1.10.0", result.Version)
-				require.Equal(t, "go1.21.0", result.Runtime)
 				require.Equal(t, "/tmp/mailpit.db", result.Database)
-				require.Equal(t, 1025, result.SMTPPort)
-				require.Equal(t, 8025, result.HTTPPort)
-				require.Equal(t, []string{"test", "work"}, result.Tags)
+				require.GreaterOrEqual(t, result.Messages, 0)
+				require.GreaterOrEqual(t, result.Unread, 0)
 			}
 		})
 	}
@@ -333,9 +331,21 @@ func TestClient_GetWebUIConfig(t *testing.T) {
 		{
 			name: "successful request",
 			serverResponse: `{
-				"ReadOnly": false,
-				"Version": "v1.10.0",
-				"ShowVersions": true
+				"Label": "Test Mailpit",
+				"MessageRelay": {
+					"Enabled": false,
+					"SMTPServer": "",
+					"ReturnPath": "",
+					"AllowedRecipients": "",
+					"BlockedRecipients": "",
+					"OverrideFrom": "",
+					"PreserveMessageIDs": false,
+					"RecipientAllowlist": ""
+				},
+				"SpamAssassin": false,
+				"ChaosEnabled": false,
+				"DuplicatesIgnored": false,
+				"HideDeleteAllButton": false
 			}`,
 			serverStatus: http.StatusOK,
 			expectError:  false,
@@ -392,9 +402,8 @@ func TestClient_GetWebUIConfig(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, result)
-				require.False(t, result.ReadOnly)
-				require.Equal(t, "v1.10.0", result.Version)
-				require.True(t, result.ShowVersions)
+				require.Equal(t, "Test Mailpit", result.Label)
+				require.False(t, result.MessageRelay.Enabled)
 			}
 		})
 	}

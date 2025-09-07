@@ -45,6 +45,10 @@ type Client interface {
 	// View operations
 	GetMessageHTML(ctx context.Context, id string) (string, error)
 	GetMessageText(ctx context.Context, id string) (string, error)
+	GetMessageRaw(ctx context.Context, id string) (string, error)
+	GetMessagePartHTML(ctx context.Context, messageID, partID string) (string, error)
+	GetMessagePartText(ctx context.Context, messageID, partID string) (string, error)
+	GetMessageEvents(ctx context.Context, id string) (*EventsResponse, error)
 
 	// Server operations
 	GetServerInfo(ctx context.Context) (*ServerInfo, error)
