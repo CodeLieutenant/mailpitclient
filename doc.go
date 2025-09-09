@@ -1,4 +1,4 @@
-// package mailpit_go_api provides a production-ready Go client for interacting with Mailpit API.
+// package mailpitclient provides a production-ready Go client for interacting with Mailpit API.
 //
 // Mailpit is a popular email testing tool that provides a REST API for managing emails.
 // This client provides comprehensive functionality for managing messages, retrieving server
@@ -327,4 +327,4 @@
 // - Implement proper logging and observability
 //
 // The client is thread-safe and can be used concurrently from multiple goroutines.
-package mailpit_go_api
+package mailpitclient

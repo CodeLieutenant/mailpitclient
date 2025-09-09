@@ -1,5 +1,5 @@
 // nolint:goconst
-package mailpit_go_api
+package mailpitclient
 
 import (
 	"context"

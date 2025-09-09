@@ -1,4 +1,4 @@
-package mailpit_go_api
+package mailpitclient
 
 import "fmt"
 

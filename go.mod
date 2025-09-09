@@ -1,4 +1,4 @@
-module github.com/CodeLieutenant/mailpit-go-api
+module github.com/CodeLieutenant/mailpitclient
 
 go 1.25.0
 

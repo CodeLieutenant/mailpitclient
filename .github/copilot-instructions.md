@@ -1,10 +1,10 @@
-# Copilot Instructions for mailpit-go-api
+# Copilot Instructions for mailpitclient
 
 This is a production-ready Go client library for the Mailpit API, designed for high performance and reliability in production environments. Follow these guidelines when generating code for this project.
 
 ## Project Overview
 
-The `mailpit-go-api` is a comprehensive Go client library that provides 100% coverage of the Mailpit API endpoints. Mailpit is an email testing tool with a REST API for managing emails, messages, tags, and server operations.
+The `mailpitclient` is a comprehensive Go client library that provides 100% coverage of the Mailpit API endpoints. Mailpit is an email testing tool with a REST API for managing emails, messages, tags, and server operations.
 
 **Key Features:**
 - Complete API coverage with all Mailpit endpoints

@@ -1,4 +1,220 @@
-package mailpitclient
+// Package testing provides testing utilities and infrastructure for mailpitclient end-to-end tests.
+//
+// This package offers a complete testing framework for the mailpitclient library, including
+// Docker-based Mailpit server setup, SMTP container pooling, and helper functions for
+// common testing scenarios.
+//
+// # Basic Usage
+//
+// The primary entry point is GetTestSMTP(), which provides a complete test environment:
+//
+//	func TestExample(t *testing.T) {
+//		t.Parallel()  // REQUIRED for parallel execution
+//
+//		testSMTP := GetTestSMTP(t)
+//		client := testSMTP.MailpitClient
+//		ctx := t.Context()
+//
+//		// Your test code here
+//		messages, err := client.ListMessages(ctx, nil)
+//		require.NoError(t, err)
+//	}
+//
+// # Testing Requirements
+//
+// MANDATORY: All tests MUST follow these parallel execution requirements:
+//
+// 1. Every test function MUST have t.Parallel() as the first line
+// 2. Every subtest MUST have t.Parallel() as the first line
+// 3. Each test/subtest MUST get its own TestSMTP instance via GetTestSMTP(t)
+// 4. Never share TestSMTP instances between tests - this causes race conditions
+//
+// Example of proper parallel test structure:
+//
+//	func TestMailpitClient_Operations(t *testing.T) {
+//		t.Parallel()  // REQUIRED - FIRST LINE
+//
+//		t.Run("ListMessages", func(t *testing.T) {
+//			t.Parallel()  // REQUIRED - FIRST LINE
+//			testSMTP := GetTestSMTP(t)  // REQUIRED - own instance
+//			client := testSMTP.MailpitClient
+//			ctx := t.Context()
+//
+//			// Send test email specific to this test
+//			sendTestEmailWithSubject(t, testSMTP, "ListMessages Test Email")
+//			time.Sleep(2 * time.Second)  // Allow processing time
+//
+//			messages, err := client.ListMessages(ctx, nil)
+//			require.NoError(t, err)
+//			require.GreaterOrEqual(t, len(messages.Messages), 1)
+//		})
+//
+//		t.Run("GetMessage", func(t *testing.T) {
+//			t.Parallel()  // REQUIRED - FIRST LINE
+//			testSMTP := GetTestSMTP(t)  // REQUIRED - own instance
+//			client := testSMTP.MailpitClient
+//			ctx := t.Context()
+//
+//			// Send test email specific to this test
+//			sendTestEmailWithSubject(t, testSMTP, "GetMessage Test Email")
+//			messages := testSMTP.WaitForMessages(t, 1, 5*time.Second)
+//
+//			message, err := client.GetMessage(ctx, messages[0].ID)
+//			require.NoError(t, err)
+//			require.Equal(t, "GetMessage Test Email", message.Subject)
+//		})
+//	}
+//
+// # Container Management
+//
+// The package uses a container pool to optimize test performance while maintaining isolation:
+//
+// - Container Pool: Reuses Mailpit containers across tests for efficiency
+// - Automatic Cleanup: Containers are properly cleaned up after test completion
+// - TLS Support: Containers are pre-configured with TLS certificates for HTTPS testing
+// - Port Management: Dynamically assigned ports prevent conflicts
+//
+// Container pool size can be configured via environment variable:
+//
+//	export TEST_SMTP_POOL_SIZE=10  # Default is 5
+//
+// # TestSMTP Structure
+//
+// The TestSMTP struct provides everything needed for e2e testing:
+//
+//	type TestSMTP struct {
+//		Container     testcontainers.Container  // Docker container instance
+//		MailpitClient mailpitclient.Client     // Pre-configured mailpit client
+//		SMTPPort      string                   // Mapped SMTP port (1025)
+//		APIPort       string                   // Mapped API port (8025)
+//		Host          string                   // Container host (usually localhost)
+//		SMTPConfig    SMTPConfig              // SMTP connection details
+//	}
+//
+// # Helper Functions
+//
+// The package provides several helper functions for common testing scenarios:
+//
+// ## ClearMessages
+// Removes all messages from the Mailpit server:
+//
+//	testSMTP.ClearMessages(t)
+//
+// ## GetMessages
+// Retrieves all current messages:
+//
+//	messages := testSMTP.GetMessages(t)
+//
+// ## WaitForMessages
+// Waits for a specific number of messages with timeout:
+//
+//	messages := testSMTP.WaitForMessages(t, 2, 10*time.Second)
+//
+// # SMTP Configuration
+//
+// The SMTPConfig provides SMTP server connection details:
+//
+//	smtpConfig := testSMTP.SMTPConfig
+//	// Connect to SMTP server at smtpConfig.Host:smtpConfig.Port
+//	// Supports both TLS and non-TLS connections
+//	// Authentication: PLAIN (accepts any credentials)
+//
+// Example SMTP usage with Go's net/smtp:
+//
+//	func sendTestEmail(t *testing.T, testSMTP *TestSMTP, subject, body string) {
+//		config := testSMTP.SMTPConfig
+//		addr := net.JoinHostPort(config.Host, strconv.Itoa(int(config.Port)))
+//
+//		msg := fmt.Sprintf("To: test@example.com\r\nSubject: %s\r\n\r\n%s", subject, body)
+//		err := smtp.SendMail(addr, nil, "sender@example.com", []string{"test@example.com"}, []byte(msg))
+//		require.NoError(t, err)
+//	}
+//
+// # Complete E2E Test Example
+//
+// Here's a comprehensive example showing proper e2e test structure:
+//
+//	func TestMailpitClient_E2E(t *testing.T) {
+//		t.Parallel()
+//
+//		t.Run("SendAndRetrieve", func(t *testing.T) {
+//			t.Parallel()
+//			testSMTP := GetTestSMTP(t)
+//			client := testSMTP.MailpitClient
+//			ctx := t.Context()
+//
+//			// Clear any existing messages
+//			testSMTP.ClearMessages(t)
+//
+//			// Send a test email via SMTP
+//			sendTestEmail(t, testSMTP, "E2E Test Subject", "Test body content")
+//
+//			// Wait for message to arrive
+//			messages := testSMTP.WaitForMessages(t, 1, 10*time.Second)
+//			require.Len(t, messages, 1)
+//
+//			// Verify message content
+//			message, err := client.GetMessage(ctx, messages[0].ID)
+//			require.NoError(t, err)
+//			require.Equal(t, "E2E Test Subject", message.Subject)
+//
+//			// Test message operations
+//			err = client.MarkMessageRead(ctx, message.ID)
+//			require.NoError(t, err)
+//
+//			// Get updated message
+//			updatedMessage, err := client.GetMessage(ctx, message.ID)
+//			require.NoError(t, err)
+//			require.True(t, updatedMessage.Read)
+//
+//			// Clean up
+//			err = client.DeleteMessage(ctx, message.ID)
+//			require.NoError(t, err)
+//		})
+//	}
+//
+// # Performance Considerations
+//
+// - Container Pooling: Containers are reused across tests to reduce startup overhead
+// - Parallel Execution: All tests run in parallel for maximum performance
+// - Resource Cleanup: Automatic cleanup prevents resource leaks
+// - Wait Strategies: Use WaitForMessages() instead of fixed sleeps when possible
+//
+// # TestMain Setup
+//
+// For proper cleanup, use TestMain in your test files:
+//
+//	func TestMain(m *testing.M) {
+//		code := m.Run()
+//		testing.CleanupSMTPContainers()
+//		os.Exit(code)
+//	}
+//
+// # Common Pitfalls to Avoid
+//
+// 1. DON'T share TestSMTP instances between tests - causes race conditions
+// 2. DON'T forget t.Parallel() - breaks parallel execution requirements
+// 3. DON'T use fixed sleeps - use WaitForMessages() for reliability
+// 4. DON'T rely on message order - tests should be order-independent
+// 5. DON'T assume clean state - use ClearMessages() or send specific test data
+//
+// # Environment Configuration
+//
+// The testing package supports these environment variables:
+//
+//	TEST_SMTP_POOL_SIZE=5    # Container pool size (default: 5)
+//
+// # Dependencies
+//
+// Required for e2e testing:
+// - Docker daemon running
+// - testcontainers-go library
+// - Mailpit Docker image (axllent/mailpit:latest)
+// - TLS certificates in certs/ directory (generated via make mkcert-generate)
+//
+// This testing framework ensures reliable, fast, and isolated e2e testing for the
+// mailpitclient library while maintaining production-level quality standards.
+package testing
 
 import (
 	"context"
@@ -14,6 +230,8 @@ import (
 
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/CodeLieutenant/mailpitclient"
 )
 
 // SMTPContainerPool manages a pool of SMTP containers
@@ -42,7 +260,7 @@ type SMTPConfig struct {
 // TestSMTP holds the test SMTP resources
 type TestSMTP struct {
 	Container     testcontainers.Container
-	MailpitClient Client
+	MailpitClient mailpitclient.Client
 	SMTPPort      string
 	APIPort       string
 	Host          string
@@ -89,13 +307,13 @@ func GetTestSMTP(tb testing.TB) *TestSMTP {
 		Encryption: "starttls",
 	}
 	// Create mailpit client
-	mailpitConfig := &Config{
+	mailpitConfig := &mailpitclient.Config{
 		BaseURL:    "http://" + net.JoinHostPort(host, apiPort.Port()),
 		APIPath:    "/api/v1",
 		HTTPClient: &http.Client{Timeout: 10 * time.Second},
 	}
 
-	mailpitClient, err := NewClient(mailpitConfig)
+	mailpitClient, err := mailpitclient.NewClient(mailpitConfig)
 	if err != nil {
 		tb.Fatalf("Failed to create mailpit client: %v", err)
 	}
@@ -171,7 +389,7 @@ func getSMTPContainerFromPool(tb testing.TB) testcontainers.Container {
 		ctx := tb.Context()
 
 		// Get project root and certificates directory
-		certsPath := filepath.Join(ProjectRootDir(tb), "certs")
+		certsPath := filepath.Join(projectRootDir(tb), "certs")
 
 		// Create mailpit container request
 		req := testcontainers.ContainerRequest{
@@ -251,7 +469,7 @@ func (ts *TestSMTP) ClearMessages(tb testing.TB) {
 }
 
 // GetMessages is a helper function to retrieve all messages from mailpit
-func (ts *TestSMTP) GetMessages(tb testing.TB) []Message {
+func (ts *TestSMTP) GetMessages(tb testing.TB) []mailpitclient.Message {
 	tb.Helper()
 	resp, err := ts.MailpitClient.ListMessages(tb.Context(), nil)
 	if err != nil {
@@ -262,7 +480,7 @@ func (ts *TestSMTP) GetMessages(tb testing.TB) []Message {
 }
 
 // WaitForMessages waits for the expected number of messages to arrive
-func (ts *TestSMTP) WaitForMessages(tb testing.TB, expectedCount int, timeout time.Duration) []Message {
+func (ts *TestSMTP) WaitForMessages(tb testing.TB, expectedCount int, timeout time.Duration) []mailpitclient.Message {
 	tb.Helper()
 
 	ctx, cancel := context.WithTimeout(tb.Context(), timeout)
@@ -324,9 +542,9 @@ var (
 	projectRootDirCacheMu sync.RWMutex
 )
 
-func ProjectRootDir(tb testing.TB) string {
+func projectRootDir(tb testing.TB) string {
 	tb.Helper()
-	originalWorkingDir := WorkingDir(tb)
+	originalWorkingDir := workingDir(tb)
 	workingDir := originalWorkingDir
 
 	projectRootDirCacheMu.RLock()
@@ -353,7 +571,7 @@ func ProjectRootDir(tb testing.TB) string {
 			tb.FailNow()
 		}
 
-		workingDir, err = GetAbsolutePath(filepath.Join(workingDir, ".."))
+		workingDir, err = getAbsolutePath(filepath.Join(workingDir, ".."))
 		if err != nil {
 			tb.Errorf("failed to get absolute path from %s", filepath.Join(workingDir, ".."))
 			tb.FailNow()
@@ -368,7 +586,7 @@ func ProjectRootDir(tb testing.TB) string {
 	return ""
 }
 
-func WorkingDir(tb testing.TB) string {
+func workingDir(tb testing.TB) string {
 	tb.Helper()
 	wd, err := os.Getwd()
 	if err != nil {
@@ -379,8 +597,8 @@ func WorkingDir(tb testing.TB) string {
 	return wd
 }
 
-// GetAbsolutePath Returns absolute path string for a given directory and error if directory doesent exist
-func GetAbsolutePath(path string) (string, error) {
+// getAbsolutePath Returns absolute path string for a given directory and error if directory doesent exist
+func getAbsolutePath(path string) (string, error) {
 	var err error
 
 	if !filepath.IsAbs(path) {

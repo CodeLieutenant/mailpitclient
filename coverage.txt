@@ -241,10 +241,10 @@ github.com/CodeLieutenant/mailpit-go-api/tags.go:67.15,69.3 1 1
 github.com/CodeLieutenant/mailpit-go-api/tags.go:71.2,74.16 3 3
 github.com/CodeLieutenant/mailpit-go-api/tags.go:74.16,76.3 1 2
 github.com/CodeLieutenant/mailpit-go-api/tags.go:77.2,79.12 2 1
-github.com/CodeLieutenant/mailpit-go-api/types.go:14.60,17.59 2 60
+github.com/CodeLieutenant/mailpit-go-api/types.go:14.60,17.59 2 61
 github.com/CodeLieutenant/mailpit-go-api/types.go:17.59,21.3 2 15
-github.com/CodeLieutenant/mailpit-go-api/types.go:24.2,25.51 2 45
-github.com/CodeLieutenant/mailpit-go-api/types.go:25.51,29.3 2 45
+github.com/CodeLieutenant/mailpit-go-api/types.go:24.2,25.51 2 46
+github.com/CodeLieutenant/mailpit-go-api/types.go:25.51,29.3 2 46
 github.com/CodeLieutenant/mailpit-go-api/types.go:32.2,34.12 2 0
 github.com/CodeLieutenant/mailpit-go-api/types.go:132.51,135.17 2 31
 github.com/CodeLieutenant/mailpit-go-api/types.go:135.17,137.3 1 1

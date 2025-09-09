@@ -173,12 +173,12 @@ formatters:
       extra-rules: true
     goimports:
       local-prefixes:
-        - github.com/CodeLieutenant/mailpit-go-api
+        - github.com/CodeLieutenant/mailpitclient
     gci:
       sections:
         - standard
         - default
-        - prefix(github.com/CodeLieutenant/mailpit-go-api)
+        - prefix(github.com/CodeLieutenant/mailpitclient)
       no-inline-comments: true
     golines:
       max-len: 180

@@ -1,6 +1,6 @@
-// package mailpit_go_api provides a production-ready client for interacting with Mailpit API.
+// package mailpitclient provides a production-ready client for interacting with Mailpit API.
 // Mailpit is a popular email testing tool that provides a REST API for managing emails.
-package mailpit_go_api
+package mailpitclient
 
 import (
 	"context"

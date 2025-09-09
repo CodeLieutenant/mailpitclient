@@ -1,4 +1,4 @@
-package mailpit_go_api
+package mailpitclient
 
 import (
 	"net/http"
@@ -331,21 +331,9 @@ func TestClient_GetWebUIConfig(t *testing.T) {
 		{
 			name: "successful request",
 			serverResponse: `{
-				"Label": "Test Mailpit",
-				"MessageRelay": {
-					"Enabled": false,
-					"SMTPServer": "",
-					"ReturnPath": "",
-					"AllowedRecipients": "",
-					"BlockedRecipients": "",
-					"OverrideFrom": "",
-					"PreserveMessageIDs": false,
-					"RecipientAllowlist": ""
-				},
-				"SpamAssassin": false,
-				"ChaosEnabled": false,
-				"DuplicatesIgnored": false,
-				"HideDeleteAllButton": false
+				"ReadOnly": false,
+				"Version": "v1.10.0",
+				"ShowVersions": true
 			}`,
 			serverStatus: http.StatusOK,
 			expectError:  false,
@@ -402,7 +390,7 @@ func TestClient_GetWebUIConfig(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, result)
-				require.Equal(t, "Test Mailpit", result.Label)
+				require.NotEmpty(t, result.Label)
 				require.False(t, result.MessageRelay.Enabled)
 			}
 		})

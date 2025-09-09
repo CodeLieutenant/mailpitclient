@@ -1,4 +1,4 @@
-package mailpit_go_api
+package mailpitclient
 
 import (
 	"context"
@@ -17,9 +17,9 @@ import (
 
 // OpenAPISpec represents the OpenAPI/Swagger specification structure
 type OpenAPISpec struct {
-	Swagger string                 `json:"swagger"`
 	Info    map[string]interface{} `json:"info"`
 	Paths   map[string]PathItem    `json:"paths"`
+	Swagger string                 `json:"swagger"`
 }
 
 // PathItem represents a path in the OpenAPI spec
@@ -34,21 +34,21 @@ type PathItem struct {
 
 // Operation represents an operation in the OpenAPI spec
 type Operation struct {
+	Responses   map[string]interface{} `json:"responses,omitempty"`
 	OperationID string                 `json:"operationId,omitempty"`
 	Summary     string                 `json:"summary,omitempty"`
 	Description string                 `json:"description,omitempty"`
 	Tags        []string               `json:"tags,omitempty"`
 	Parameters  []Parameter            `json:"parameters,omitempty"`
-	Responses   map[string]interface{} `json:"responses,omitempty"`
 }
 
 // Parameter represents a parameter in the OpenAPI spec
 type Parameter struct {
 	Name        string `json:"name"`
 	In          string `json:"in"`
-	Required    bool   `json:"required"`
 	Type        string `json:"type,omitempty"`
 	Description string `json:"description,omitempty"`
+	Required    bool   `json:"required"`
 }
 
 // APIRoute represents a discovered API route
@@ -63,16 +63,16 @@ type APIRoute struct {
 // ClientMethod represents an implemented client method
 type ClientMethod struct {
 	Name        string
-	Method      reflect.Method
 	Description string
+	Method      reflect.Method
 }
 
 // RouteMapping maps API routes to client methods
 type RouteMapping struct {
-	Route        APIRoute
 	ClientMethod *ClientMethod
-	Implemented  bool
 	Notes        string
+	Route        APIRoute
+	Implemented  bool
 }
 
 const (
@@ -111,7 +111,7 @@ const (
 func TestAPIRouteCoverage(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
 
 	// Fetch the latest OpenAPI specification
@@ -163,12 +163,12 @@ func fetchMailpitOpenAPISpec(ctx context.Context) (*OpenAPISpec, error) {
 
 // tryFetchSwagger attempts to fetch and parse the swagger specification from a URL
 func tryFetchSwagger(ctx context.Context, client *http.Client, url string) (*OpenAPISpec, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("User-Agent", "mailpit-go-api-coverage-test/1.0.0")
+	req.Header.Set("User-Agent", "mailpitclient-coverage-test/1.0.0")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := client.Do(req)
@@ -178,6 +178,7 @@ func tryFetchSwagger(ctx context.Context, client *http.Client, url string) (*Ope
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		// nolint:err113
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
@@ -187,7 +188,7 @@ func tryFetchSwagger(ctx context.Context, client *http.Client, url string) (*Ope
 	}
 
 	var spec OpenAPISpec
-	if err := json.Unmarshal(body, &spec); err != nil {
+	if err = json.Unmarshal(body, &spec); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
@@ -212,6 +213,7 @@ func extractAPIRoutes(spec *OpenAPISpec) []APIRoute {
 		if routes[i].Path != routes[j].Path {
 			return routes[i].Path < routes[j].Path
 		}
+
 		return routes[i].Method < routes[j].Method
 	})
 
@@ -253,7 +255,7 @@ func getClientMethods() []ClientMethod {
 	// Get the Client interface type
 	clientType := reflect.TypeOf((*Client)(nil)).Elem()
 
-	for i := 0; i < clientType.NumMethod(); i++ {
+	for i := range clientType.NumMethod() {
 		method := clientType.Method(i)
 
 		// Only include public methods (those starting with uppercase)
@@ -307,7 +309,7 @@ func generateMethodDescription(methodName string) string {
 
 // createRouteMappings creates mappings between API routes and client methods
 func createRouteMappings(routes []APIRoute, methods []ClientMethod) []RouteMapping {
-	var mappings []RouteMapping
+	mappings := make([]RouteMapping, 0, len(routes))
 
 	for _, route := range routes {
 		mapping := RouteMapping{
@@ -334,25 +336,25 @@ func findMatchingMethod(route APIRoute, methods []ClientMethod) *ClientMethod {
 	// Define route to method mappings
 	routeMethodMap := map[string]string{
 		// Core message operations
-		"GET:/api/v1/messages":                       "ListMessages",
-		"DELETE:/api/v1/messages":                    "DeleteAllMessages",
-		"PUT:/api/v1/messages":                       "MarkMessageRead", // Set read status - maps to our read/unread methods
-		"GET:/api/v1/message/{ID}":                   "GetMessage",
-		"DELETE:/api/v1/message/{ID}":                "DeleteMessage",
-		"GET:/api/v1/message/{ID}/headers":           "GetMessageHeaders",
-		"GET:/api/v1/message/{ID}/source":            "GetMessageSource",
-		"GET:/api/v1/message/{ID}/raw":               "GetMessageSource", // Raw message source
-		"GET:/api/v1/message/{ID}/events":            "GetMessageEvents",
-		"POST:/api/v1/message/{ID}/release":          "ReleaseMessage",
-		"PUT:/api/v1/messages/{ID}/read":             "MarkMessageRead",
-		"PUT:/api/v1/messages/{ID}/unread":           "MarkMessageUnread",
-		"GET:/api/v1/message/{ID}/html-check":        "GetMessageHTMLCheck",
-		"GET:/api/v1/message/{ID}/link-check":        "GetMessageLinkCheck",
-		"GET:/api/v1/message/{ID}/sa-check":          "GetMessageSpamAssassinCheck",
-		"GET:/api/v1/message/{ID}/part/{partID}":     "GetMessagePart",
-		"GET:/api/v1/message/{ID}/part/{PartID}":     "GetMessagePart", // Handle PartID case
-		"GET:/api/v1/message/{ID}/part/{partID}/thumb": "GetMessagePartThumbnail",
-		"GET:/api/v1/message/{ID}/part/{PartID}/thumb": "GetMessagePartThumbnail", // Handle PartID case
+		"GET:/api/v1/messages":                               "ListMessages",
+		"DELETE:/api/v1/messages":                            "DeleteAllMessages",
+		"PUT:/api/v1/messages":                               "MarkMessageRead", // Set read status - maps to our read/unread methods
+		"GET:/api/v1/message/{ID}":                           "GetMessage",
+		"DELETE:/api/v1/message/{ID}":                        "DeleteMessage",
+		"GET:/api/v1/message/{ID}/headers":                   "GetMessageHeaders",
+		"GET:/api/v1/message/{ID}/source":                    "GetMessageSource",
+		"GET:/api/v1/message/{ID}/raw":                       "GetMessageSource", // Raw message source
+		"GET:/api/v1/message/{ID}/events":                    "GetMessageEvents",
+		"POST:/api/v1/message/{ID}/release":                  "ReleaseMessage",
+		"PUT:/api/v1/messages/{ID}/read":                     "MarkMessageRead",
+		"PUT:/api/v1/messages/{ID}/unread":                   "MarkMessageUnread",
+		"GET:/api/v1/message/{ID}/html-check":                "GetMessageHTMLCheck",
+		"GET:/api/v1/message/{ID}/link-check":                "GetMessageLinkCheck",
+		"GET:/api/v1/message/{ID}/sa-check":                  "GetMessageSpamAssassinCheck",
+		"GET:/api/v1/message/{ID}/part/{partID}":             "GetMessagePart",
+		"GET:/api/v1/message/{ID}/part/{PartID}":             "GetMessagePart", // Handle PartID case
+		"GET:/api/v1/message/{ID}/part/{partID}/thumb":       "GetMessagePartThumbnail",
+		"GET:/api/v1/message/{ID}/part/{PartID}/thumb":       "GetMessagePartThumbnail", // Handle PartID case
 		"GET:/api/v1/message/{ID}/attachment/{attachmentID}": "GetMessageAttachment",
 
 		// Search operations
@@ -379,9 +381,9 @@ func findMatchingMethod(route APIRoute, methods []ClientMethod) *ClientMethod {
 		"GET:/livez": "HealthCheck",
 
 		// View operations (these might be different in swagger)
-		"GET:/view/{ID}.html":           "GetMessageHTML",
-		"GET:/view/{ID}.txt":            "GetMessageText",
-		"GET:/view/{ID}.raw":            "GetMessageRaw",
+		"GET:/view/{ID}.html":               "GetMessageHTML",
+		"GET:/view/{ID}.txt":                "GetMessageText",
+		"GET:/view/{ID}.raw":                "GetMessageRaw",
 		"GET:/view/{ID}/part/{partID}.html": "GetMessagePartHTML",
 		"GET:/view/{ID}/part/{partID}.text": "GetMessagePartText",
 
@@ -461,61 +463,66 @@ func analyzeCoverage(mappings []RouteMapping) map[string]interface{} {
 }
 
 // reportCoverageResults reports the coverage analysis results
-func reportCoverageResults(t *testing.T, coverage map[string]interface{}, mappings []RouteMapping) {
-	t.Logf("\n%s", strings.Repeat("=", 80))
-	t.Logf("API ROUTE COVERAGE ANALYSIS")
-	t.Logf("%s", strings.Repeat("=", 80))
-	t.Logf("Total API Routes: %d", coverage["total"])
-	t.Logf("Implemented: %d", coverage["implemented"])
-	t.Logf("Missing: %d", coverage["missing"])
-	t.Logf("Coverage: %.2f%%", coverage["coverage_percent"])
-	t.Logf("%s", strings.Repeat("=", 80))
+func reportCoverageResults(tb testing.TB, coverage map[string]interface{}, mappings []RouteMapping) {
+	tb.Helper()
+
+	tb.Logf("\n%s", strings.Repeat("=", 80))
+	tb.Logf("API ROUTE COVERAGE ANALYSIS")
+	tb.Logf("%s", strings.Repeat("=", 80))
+	tb.Logf("Total API Routes: %d", coverage["total"])
+	tb.Logf("Implemented: %d", coverage["implemented"])
+	tb.Logf("Missing: %d", coverage["missing"])
+	tb.Logf("Coverage: %.2f%%", coverage["coverage_percent"])
+	tb.Logf("%s", strings.Repeat("=", 80))
 
 	// Report implemented routes
-	t.Logf("\n✅ IMPLEMENTED ROUTES:")
+	tb.Logf("\n✅ IMPLEMENTED ROUTES:")
 	for _, mapping := range mappings {
 		if mapping.Implemented {
-			t.Logf("  %s %s -> %s()", mapping.Route.Method, mapping.Route.Path, mapping.ClientMethod.Name)
+			tb.Logf("  %s %s -> %s()", mapping.Route.Method, mapping.Route.Path, mapping.ClientMethod.Name)
 		}
 	}
 
 	// Report missing routes
-	if coverage["missing"].(int) > 0 {
-		t.Logf("\n❌ MISSING ROUTES:")
+	if val, _ := coverage["missing"].(int); val > 0 {
+		tb.Logf("\n❌ MISSING ROUTES:")
 		for _, mapping := range mappings {
-			if !mapping.Implemented {
-				t.Logf("  %s %s", mapping.Route.Method, mapping.Route.Path)
-				if mapping.Route.Summary != "" {
-					t.Logf("    Summary: %s", mapping.Route.Summary)
-				}
-				if mapping.Route.OperationID != "" {
-					t.Logf("    Operation ID: %s", mapping.Route.OperationID)
-				}
-				if mapping.Notes != "" {
-					t.Logf("    Notes: %s", mapping.Notes)
-				}
+			if mapping.Implemented {
+				continue
+			}
+
+			tb.Logf("  %s %s", mapping.Route.Method, mapping.Route.Path)
+			if mapping.Route.Summary != "" {
+				tb.Logf("    Summary: %s", mapping.Route.Summary)
+			}
+			if mapping.Route.OperationID != "" {
+				tb.Logf("    Operation ID: %s", mapping.Route.OperationID)
+			}
+			if mapping.Notes != "" {
+				tb.Logf("    Notes: %s", mapping.Notes)
 			}
 		}
 	}
 
-	t.Logf("\n%s", strings.Repeat("=", 80))
+	tb.Logf("\n%s", strings.Repeat("=", 80))
 }
 
 // checkRequiredRoutes fails the test if any required routes are missing
-func checkRequiredRoutes(t *testing.T, mappings []RouteMapping) {
+func checkRequiredRoutes(tb testing.TB, mappings []RouteMapping) {
+	tb.Helper()
 	// Define routes that are considered optional (might return 404 in some setups)
 	optionalRoutes := map[string]bool{
-		"GET:/api/v1/message/{ID}/html-check":        true,
-		"GET:/api/v1/message/{ID}/link-check":        true,
-		"GET:/api/v1/message/{ID}/sa-check":          true,
-		"GET:/api/v1/chaos":                          true,
-		"PUT:/api/v1/chaos":                          true,
-		"POST:/api/v1/message/{ID}/release":          true,
-		"GET:/api/v1/message/{ID}/events":            true,
+		"GET:/api/v1/message/{ID}/html-check":          true,
+		"GET:/api/v1/message/{ID}/link-check":          true,
+		"GET:/api/v1/message/{ID}/sa-check":            true,
+		"GET:/api/v1/chaos":                            true,
+		"PUT:/api/v1/chaos":                            true,
+		"POST:/api/v1/message/{ID}/release":            true,
+		"GET:/api/v1/message/{ID}/events":              true,
 		"GET:/api/v1/message/{ID}/part/{partID}/thumb": true,
 		"GET:/api/v1/message/{ID}/part/{PartID}/thumb": true,
-		"PUT:/api/v1/tags/{Tag}":                     true, // Rename tag - not implemented yet
-		"PUT:/api/v1/messages":                       true, // Bulk read status - partially implemented
+		"PUT:/api/v1/tags/{Tag}":                       true, // Rename tag - not implemented yet
+		"PUT:/api/v1/messages":                         true, // Bulk read status - partially implemented
 	}
 
 	var missingRequired []RouteMapping
@@ -536,9 +543,9 @@ func checkRequiredRoutes(t *testing.T, mappings []RouteMapping) {
 
 	// Log optional missing routes as warnings
 	if len(missingOptional) > 0 {
-		t.Logf("\n⚠️  OPTIONAL MISSING ROUTES (not required for test to pass):")
+		tb.Logf("\n⚠️  OPTIONAL MISSING ROUTES (not required for test to pass):")
 		for _, mapping := range missingOptional {
-			t.Logf("  %s %s - %s", mapping.Route.Method, mapping.Route.Path, mapping.Route.Summary)
+			tb.Logf("  %s %s - %s", mapping.Route.Method, mapping.Route.Path, mapping.Route.Summary)
 		}
 	}
 
@@ -552,34 +559,35 @@ func checkRequiredRoutes(t *testing.T, mappings []RouteMapping) {
 		failMsg := fmt.Sprintf("The following required API routes are not implemented in the client library:\n%s\n\n"+
 			"Please implement client methods for these routes to achieve 100%% coverage.",
 			strings.Join(missingRoutesList, "\n"))
-		require.Fail(t, "Missing required API route implementations", failMsg)
+		require.Fail(tb, "Missing required API route implementations", failMsg)
 	}
 
 	// Ensure we have high coverage
 	coverage := analyzeCoverage(mappings)
-	coveragePercent := coverage["coverage_percent"].(float64)
+	coveragePercent, _ := coverage["coverage_percent"].(float64)
 
 	if coveragePercent < 95.0 {
 		failMsg := fmt.Sprintf("API coverage is %.2f%%, which is below the required 95%% threshold. "+
 			"Missing %d out of %d routes.",
 			coveragePercent, coverage["missing"], coverage["total"])
-		require.Fail(t, "API coverage below threshold", failMsg)
+		require.Fail(tb, "API coverage below threshold", failMsg)
 	}
 
-	t.Logf("\n✅ API Route Coverage Test PASSED!")
-	t.Logf("   Coverage: %.2f%% (%d/%d routes implemented)",
+	tb.Logf("\n✅ API Route Coverage Test PASSED!")
+	tb.Logf("   Coverage: %.2f%% (%d/%d routes implemented)",
 		coveragePercent, coverage["implemented"], coverage["total"])
 
 	if len(missingOptional) > 0 {
-		t.Logf("   Note: %d optional routes are missing but this is acceptable", len(missingOptional))
+		tb.Logf("   Note: %d optional routes are missing but this is acceptable", len(missingOptional))
 	}
 
 	// Check for potentially incorrect mappings
-	checkMappingQuality(t, mappings)
+	checkMappingQuality(tb, mappings)
 }
 
 // checkMappingQuality checks for potentially incorrect or suboptimal route mappings
-func checkMappingQuality(t *testing.T, mappings []RouteMapping) {
+func checkMappingQuality(tb testing.TB, mappings []RouteMapping) {
+	tb.Helper()
 	var warnings []string
 
 	for _, mapping := range mappings {
@@ -604,11 +612,11 @@ func checkMappingQuality(t *testing.T, mappings []RouteMapping) {
 	}
 
 	if len(warnings) > 0 {
-		t.Logf("\n⚠️  MAPPING QUALITY WARNINGS:")
+		tb.Logf("\n⚠️  MAPPING QUALITY WARNINGS:")
 		for _, warning := range warnings {
-			t.Logf("   - %s", warning)
+			tb.Logf("   - %s", warning)
 		}
-		t.Logf("   Consider implementing proper methods for these routes.")
+		tb.Logf("   Consider implementing proper methods for these routes.")
 	}
 }
 
@@ -677,7 +685,7 @@ func TestAPIRouteCoverageOffline(t *testing.T) {
 	coverage := analyzeCoverage(mappings)
 
 	// This test should always pass as it tests against our known implementation
-	coveragePercent := coverage["coverage_percent"].(float64)
+	coveragePercent, _ := coverage["coverage_percent"].(float64)
 	require.True(t, coveragePercent >= 90.0,
 		"Coverage should be at least 90%% for known routes, got %.2f%%", coveragePercent)
 
