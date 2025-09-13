@@ -3,6 +3,8 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/CodeLieutenant/mailpitclient.svg)](https://pkg.go.dev/github.com/CodeLieutenant/mailpitclient)
 [![Go Report Card](https://goreportcard.com/badge/github.com/CodeLieutenant/mailpitclient)](https://goreportcard.com/report/github.com/CodeLieutenant/mailpitclient)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![codecov](https://codecov.io/gh/CodeLieutenant/mailpitclient/graph/badge.svg?token=lqhmgWPlWJ)](https://codecov.io/gh/CodeLieutenant/mailpitclient)
+
 
 A **production-ready** Go client library for the [Mailpit](https://mailpit.axllent.org/) API, providing 100% coverage of all Mailpit API endpoints. Mailpit is a popular email testing tool with a REST API for managing emails, messages, tags, and server operations.
 
