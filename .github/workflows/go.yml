@@ -31,7 +31,6 @@ jobs:
       - name: Unit Tests
         run: |
           make mkcert-generate
-          make mkcert-uninstall-ca
           make test
       - name: Linting
         uses: golangci/golangci-lint-action@v8

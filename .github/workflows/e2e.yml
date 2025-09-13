@@ -27,5 +27,4 @@ jobs:
       - name: API Coverage
         run: |
             make mkcert-generate
-            make mkcert-uninstall-ca
             ./scripts/e2e.sh
