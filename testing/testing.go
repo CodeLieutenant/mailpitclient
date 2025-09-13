@@ -267,15 +267,82 @@ type TestSMTP struct {
 	SMTPConfig    SMTPConfig
 }
 
+type TestSMTPOptions struct {
+	MailPitClientConfig *mailpitclient.Config
+	SMTPConfig          *SMTPConfig
+	MailpitImage        string
+	MailpitEnv          map[string]string
+	MailpitKey          string
+	MailpitCert         string
+}
+
+type Option func(*TestSMTPOptions)
+
+func WithMailPitClientConfig(mailPitClientConfig *mailpitclient.Config) Option {
+	return func(opts *TestSMTPOptions) {
+		opts.MailPitClientConfig = mailPitClientConfig
+	}
+}
+
+func WithSMTPConfig(smtpConfig *SMTPConfig) Option {
+	return func(opts *TestSMTPOptions) {
+		opts.SMTPConfig = smtpConfig
+	}
+}
+
+func WithMailPitImage(mailPitImage string) Option {
+	return func(opts *TestSMTPOptions) {
+		opts.MailpitImage = mailPitImage
+	}
+}
+
+func WithMailPitEnv(mailPitEnv map[string]string) Option {
+	return func(opts *TestSMTPOptions) {
+		opts.MailpitEnv = mailPitEnv
+	}
+}
+
+func WithMailPitKey(mailPitKey string) Option {
+	return func(opts *TestSMTPOptions) {
+		opts.MailpitKey = mailPitKey
+	}
+}
+
+func WithMailPitCert(mailPitCert string) Option {
+	return func(opts *TestSMTPOptions) {
+		opts.MailpitCert = mailPitCert
+	}
+}
+
 // GetTestSMTP returns a configured SMTP test environment with mailpit container.
 // It uses a singleton container for efficiency and proper resource management.
-func GetTestSMTP(tb testing.TB) *TestSMTP {
+func GetTestSMTP(tb testing.TB, opts ...Option) *TestSMTP {
 	tb.Helper()
 
 	ctx := tb.Context()
 
+	testOpts := TestSMTPOptions{
+		MailPitClientConfig: &mailpitclient.Config{
+			APIPath:    "/api/v1",
+			HTTPClient: &http.Client{Timeout: 10 * time.Second},
+		},
+		SMTPConfig: &SMTPConfig{
+			AuthType:   "PLAIN",
+			Encryption: "starttls",
+		},
+	}
+
+	for _, opt := range opts {
+		opt(&testOpts)
+	}
+
 	// Use pooled container for parallel testing support
-	container := getSMTPContainerFromPool(tb)
+	container := getSMTPContainerFromPool(tb,
+		testOpts.MailpitImage,
+		testOpts.MailpitEnv,
+		testOpts.MailpitKey,
+		testOpts.MailpitCert,
+	)
 	tb.Cleanup(func() {
 		releaseSMTPContainerToPool(container)
 	})
@@ -297,23 +364,11 @@ func GetTestSMTP(tb testing.TB) *TestSMTP {
 		tb.Fatalf("Failed to get container host: %v", err)
 	}
 
-	// Create SMTP service configuration
-	smtpConfig := SMTPConfig{
-		Host:       host,
-		Port:       uint16(smtpPort.Int()),
-		Username:   "",
-		Password:   "",
-		AuthType:   "PLAIN",
-		Encryption: "starttls",
-	}
-	// Create mailpit client
-	mailpitConfig := &mailpitclient.Config{
-		BaseURL:    "http://" + net.JoinHostPort(host, apiPort.Port()),
-		APIPath:    "/api/v1",
-		HTTPClient: &http.Client{Timeout: 10 * time.Second},
-	}
+	testOpts.MailPitClientConfig.BaseURL = "http://" + net.JoinHostPort(host, apiPort.Port())
+	testOpts.SMTPConfig.Host = host
+	testOpts.SMTPConfig.Port = uint16(smtpPort.Int())
 
-	mailpitClient, err := mailpitclient.NewClient(mailpitConfig)
+	mailpitClient, err := mailpitclient.NewClient(testOpts.MailPitClientConfig)
 	if err != nil {
 		tb.Fatalf("Failed to create mailpit client: %v", err)
 	}
@@ -329,7 +384,7 @@ func GetTestSMTP(tb testing.TB) *TestSMTP {
 
 	return &TestSMTP{
 		Container:     container,
-		SMTPConfig:    smtpConfig,
+		SMTPConfig:    *testOpts.SMTPConfig,
 		MailpitClient: mailpitClient,
 		SMTPPort:      smtpPort.Port(),
 		APIPort:       apiPort.Port(),
@@ -340,6 +395,13 @@ func GetTestSMTP(tb testing.TB) *TestSMTP {
 // initSMTPContainerPool initializes the SMTP container pool structure (lazy creation)
 func initSMTPContainerPool(tb testing.TB) {
 	tb.Helper()
+
+	smtpPoolMu.Lock()
+	defer smtpPoolMu.Unlock()
+
+	if smtpContainerPool != nil {
+		return
+	}
 
 	poolSize := 5
 	// Fixed pool size for SMTP containers (can be configurable)
@@ -358,15 +420,10 @@ func initSMTPContainerPool(tb testing.TB) {
 }
 
 // getSMTPContainerFromPool gets a container from the pool, creating one lazily if needed
-func getSMTPContainerFromPool(tb testing.TB) testcontainers.Container {
+func getSMTPContainerFromPool(tb testing.TB, image string, envs map[string]string, keyPath, crtPath string) testcontainers.Container {
 	tb.Helper()
 
-	smtpPoolMu.Lock()
-	defer smtpPoolMu.Unlock()
-
-	if smtpContainerPool == nil {
-		initSMTPContainerPool(tb)
-	}
+	initSMTPContainerPool(tb)
 
 	// Try to get an available container first (non-blocking)
 	select {
@@ -384,6 +441,7 @@ func getSMTPContainerFromPool(tb testing.TB) testcontainers.Container {
 	}
 	smtpContainerPool.mu.Unlock()
 
+	//nolint:nestif
 	if canCreate {
 		// Create a new container lazily
 		ctx := tb.Context()
@@ -391,34 +449,60 @@ func getSMTPContainerFromPool(tb testing.TB) testcontainers.Container {
 		// Get project root and certificates directory
 		certsPath := filepath.Join(projectRootDir(tb), "certs")
 
+		if image == "" {
+			image = "axllent/mailpit:latest"
+		}
+
+		defaultEnv := map[string]string{
+			"MP_SMTP_REQUIRE_STARTTLS":    "false", // Allow both TLS and non-TLS connections
+			"MP_ENABLE_SPAMASSASSIN":      "true",
+			"MP_SMTP_AUTH_ACCEPT_ANY":     "1",
+			"MP_SMTP_AUTH_ALLOW_INSECURE": "1",
+			"MP_SMTP_8BITMIME":            "1", // Enable 8BITMIME support
+		}
+
+		for k, v := range envs {
+			defaultEnv[k] = v
+		}
+
+		if keyPath == "" {
+			keyPath = filepath.Join(certsPath, "smtp.key")
+		}
+
+		if crtPath == "" {
+			crtPath = filepath.Join(certsPath, "smtp.crt")
+		}
+
+		files := make([]testcontainers.ContainerFile, 0, 2)
+		if _, err := os.Stat(crtPath); err == nil {
+			files = append(files, testcontainers.ContainerFile{
+				HostFilePath:      crtPath,
+				ContainerFilePath: "/certs/smtp.crt",
+			})
+
+			defaultEnv["MP_SMTP_TLS_CERT"] = "/certs/smtp.crt"
+		}
+
+		if _, err := os.Stat(keyPath); err == nil {
+			files = append(files, testcontainers.ContainerFile{
+				HostFilePath:      keyPath,
+				ContainerFilePath: "/certs/smtp.key",
+			})
+
+			defaultEnv["MP_SMTP_TLS_KEY"] = "/certs/smtp.key"
+		}
+
 		// Create mailpit container request
 		req := testcontainers.ContainerRequest{
-			Image:        "axllent/mailpit:latest",
+			Image:        image,
 			ExposedPorts: []string{"1025/tcp", "8025/tcp"},
 			WaitingFor: wait.ForAll(
 				wait.ForListeningPort("1025/tcp"),
 				wait.ForListeningPort("8025/tcp"),
 				wait.ForHTTP("/api/v1/info").WithPort("8025/tcp").WithStartupTimeout(30*time.Second),
 			),
-			Env: map[string]string{
-				"MP_SMTP_TLS_CERT":            "/certs/smtp.crt",
-				"MP_SMTP_TLS_KEY":             "/certs/smtp.key",
-				"MP_SMTP_REQUIRE_STARTTLS":    "false", // Allow both TLS and non-TLS connections
-				"MP_ENABLE_SPAMASSASSIN":      "true",
-				"MP_SMTP_AUTH_ACCEPT_ANY":     "1",
-				"MP_SMTP_AUTH_ALLOW_INSECURE": "1",
-				"MP_SMTP_8BITMIME":            "1", // Enable 8BITMIME support
-			},
-			Files: []testcontainers.ContainerFile{
-				{
-					HostFilePath:      filepath.Join(certsPath, "smtp.crt"),
-					ContainerFilePath: "/certs/smtp.crt",
-				},
-				{
-					HostFilePath:      filepath.Join(certsPath, "smtp.key"),
-					ContainerFilePath: "/certs/smtp.key",
-				},
-			},
+			Env:   defaultEnv,
+			Files: files,
 		}
 
 		// Start the container
@@ -454,9 +538,7 @@ func getSMTPContainerFromPool(tb testing.TB) testcontainers.Container {
 
 // releaseSMTPContainerToPool returns a container to the pool
 func releaseSMTPContainerToPool(container testcontainers.Container) {
-	if smtpContainerPool != nil {
-		smtpContainerPool.available <- container
-	}
+	smtpContainerPool.available <- container
 }
 
 // ClearMessages is a helper function to clear all messages from mailpit
@@ -504,8 +586,10 @@ func (ts *TestSMTP) WaitForMessages(tb testing.TB, expectedCount int, timeout ti
 	}
 }
 
-// cleanupSMTPContainerPool terminates all containers in the pool
-func cleanupSMTPContainerPool() {
+func CleanupSMTPContainers() {
+	smtpPoolMu.Lock()
+	defer smtpPoolMu.Unlock()
+
 	if smtpContainerPool == nil {
 		return
 	}
@@ -528,13 +612,6 @@ func cleanupSMTPContainerPool() {
 	smtpContainerPool = nil
 }
 
-// CleanupSMTPContainers should be called in TestMain to cleanup shared SMTP resources
-func CleanupSMTPContainers() {
-	smtpPoolMu.Lock()
-	defer smtpPoolMu.Unlock()
-	cleanupSMTPContainerPool()
-}
-
 const gomod = "go.mod"
 
 var (
@@ -545,7 +622,7 @@ var (
 func projectRootDir(tb testing.TB) string {
 	tb.Helper()
 	originalWorkingDir := workingDir(tb)
-	workingDir := originalWorkingDir
+	wd := originalWorkingDir
 
 	projectRootDirCacheMu.RLock()
 	if dir, ok := projectRootDirCache[originalWorkingDir]; ok {
@@ -555,29 +632,29 @@ func projectRootDir(tb testing.TB) string {
 	}
 	projectRootDirCacheMu.RUnlock()
 
-	for entries, err := os.ReadDir(workingDir); err == nil; {
+	for entries, err := os.ReadDir(wd); err == nil; {
 		for _, entry := range entries {
 			if entry.Name() == gomod {
 				projectRootDirCacheMu.Lock()
-				projectRootDirCache[originalWorkingDir] = workingDir
+				projectRootDirCache[originalWorkingDir] = wd
 				projectRootDirCacheMu.Unlock()
 
-				return workingDir
+				return wd
 			}
 		}
 
-		if workingDir == "/" {
+		if wd == "/" {
 			tb.Error("got to FS Root, file not found")
 			tb.FailNow()
 		}
 
-		workingDir, err = getAbsolutePath(filepath.Join(workingDir, ".."))
+		wd, err = getAbsolutePath(filepath.Join(wd, ".."))
 		if err != nil {
-			tb.Errorf("failed to get absolute path from %s", filepath.Join(workingDir, ".."))
+			tb.Errorf("failed to get absolute path from %s", filepath.Join(wd, ".."))
 			tb.FailNow()
 		}
 
-		entries, err = os.ReadDir(workingDir)
+		entries, err = os.ReadDir(wd)
 	}
 
 	tb.Errorf("%s not found", gomod)
