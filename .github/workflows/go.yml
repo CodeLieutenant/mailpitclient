@@ -30,6 +30,7 @@ jobs:
           repo: gotestfmt
       - name: Unit Tests
         run: |
+          sudo apt install libnss3-tools
           make mkcert-generate
           make test
       - name: Linting

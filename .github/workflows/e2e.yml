@@ -26,5 +26,6 @@ jobs:
           check-latest: true
       - name: API Coverage
         run: |
+            sudo apt install libnss3-tools
             make mkcert-generate
             ./scripts/e2e.sh

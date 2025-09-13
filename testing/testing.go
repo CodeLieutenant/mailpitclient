@@ -366,6 +366,7 @@ func GetTestSMTP(tb testing.TB, opts ...Option) *TestSMTP {
 
 	testOpts.MailPitClientConfig.BaseURL = "http://" + net.JoinHostPort(host, apiPort.Port())
 	testOpts.SMTPConfig.Host = host
+	// #nosec G115
 	testOpts.SMTPConfig.Port = uint16(smtpPort.Int())
 
 	mailpitClient, err := mailpitclient.NewClient(testOpts.MailPitClientConfig)
