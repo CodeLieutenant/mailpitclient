@@ -1,0 +1,28 @@
+name: End To End Tests
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  build:
+    name: Lint Test and Build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          check-latest: true
+      - name: API Coverage
+        run: ./scripts/e2e.sh
