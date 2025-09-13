@@ -56,26 +56,25 @@ security: ## Run basic security checks (gosec)
 # --- Mkcert  -------------------------------
 
 install-mkcert: ## Install mkcert binary to $(MKCERT_INSTALL_PATH) if missing
-	@if command -v mkcert >/dev/null 2>&1; then \
-	  echo "mkcert already installed at $$(command -v mkcert)"; \
-	else \
+	@if [ ! -f "$(MKCERT_INSTALL_PATH)/mkcert" ]; then \
+	  mkdir -p $(MKCERT_INSTALL_PATH) 2>/dev/null || true; \
 	  echo "Downloading mkcert from $(MKCERT_URL)..."; \
 	  tmp=$$(mktemp -d); \
 	  curl -L --fail -o $$tmp/$(MKCERT_ASSET) "$(MKCERT_URL)"; \
 	  chmod +x $$tmp/$(MKCERT_ASSET); \
-	  sudo mv $$tmp/$(MKCERT_ASSET) $(MKCERT_INSTALL_PATH)/mkcert || { echo "Failed to move mkcert to $(MKCERT_INSTALL_PATH)"; exit 1; }; \
+	  mv $$tmp/$(MKCERT_ASSET) $(MKCERT_INSTALL_PATH)/mkcert || { echo "Failed to move mkcert to $(MKCERT_INSTALL_PATH)"; exit 1; }; \
 	  rm -rf $$tmp; \
 	  echo "mkcert installed to $(MKCERT_INSTALL_PATH)/mkcert"; \
 	fi
 
 mkcert-install-ca: install-mkcert ## Install mkcert CA into system trust stores
 	@echo "Installing mkcert CA..."
-	@mkcert -install
+	@$(MKCERT_INSTALL_PATH)/mkcert -install
 
 mkcert-generate: mkcert-install-ca ## Generate cert/key for HOSTS into $(CERT_DIR) (usage: make mkcert-generate HOSTS='example.test localhost')
 	@mkdir -p $(CERT_DIR)
 	@echo "Generating cert for: $(HOSTS)"
-	@mkcert -cert-file $(CERT_DIR)/smtp.crt -key-file $(CERT_DIR)/smtp.key $(HOSTS)
+	@$(MKCERT_INSTALL_PATH)/mkcert -cert-file $(CERT_DIR)/smtp.crt -key-file $(CERT_DIR)/smtp.key $(HOSTS)
 	@echo "Created $(CERT_DIR)/smtp.crt and $(CERT_DIR)/smtp.key"
 
 mkcert-uninstall-ca: install-mkcert ## Uninstall mkcert CA from system trust stores
